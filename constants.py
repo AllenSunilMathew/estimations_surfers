@@ -51,17 +51,19 @@ CALIBRATION_FRAMES = 30
 LANE_MOVE_THRESHOLD = 0.08        # body sideways shift (fraction of frame width) to change lane
 
 # ── Game mechanics ──────────────────────────────────────────────────
-INITIAL_SPEED = 4.5
-SPEED_INCREMENT = 0.4
-SPEED_INCREMENT_INTERVAL = 500     # points between speed bumps
-MAX_SPEED = 14.0
-OBSTACLE_SPAWN_MIN = 0.9          # seconds between obstacles
-OBSTACLE_SPAWN_MAX = 1.8
-COIN_SPAWN_INTERVAL = 0.7
-INITIAL_LIVES = 3
+INITIAL_SPEED = 5.0
+SPEED_INCREMENT = 0.5
+SPEED_INCREMENT_INTERVAL = 100     # responsive speed upgrades
+MAX_SPEED = 16.0
+OBSTACLE_SPAWN_MIN = 0.85          # seconds between obstacles
+OBSTACLE_SPAWN_MAX = 1.70
+COIN_SPAWN_INTERVAL = 0.65
+INITIAL_LIVES = 1                  # 1 life: stumbles summon police, hard hit is game over
 COIN_SCORE = 50
-BIRD_SPEED_FACTOR = 1.3            # birds fly faster than the ground scrolls
-DISTANCE_SCORE_RATE = 2            # points per unit‑distance
+BIRD_SPEED_FACTOR = 1.25           # birds fly faster than ground scroll
+TRAIN_SPEED_FACTOR = 1.45          # oncoming moving train speed
+POLICE_CHASE_DURATION = 5.5        # seconds police chases after a stumble
+DISTANCE_SCORE_RATE = 2.5          # points per unit-distance
 
 # ── Player animation ───────────────────────────────────────────────
 PLAYER_JUMP_DURATION = 0.55

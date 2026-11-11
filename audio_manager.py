@@ -57,7 +57,7 @@ class AudioManager:
         if os.path.isfile(game_over_path):
             try:
                 self.game_over_sound = pygame.mixer.Sound(game_over_path)
-                self.game_over_sound.set_volume(0.8)
+                self.game_over_sound.set_volume(0.3)
             except pygame.error as e:
                 print(f"[AudioManager] Warning: Could not load game over sound: {e}")
         else:

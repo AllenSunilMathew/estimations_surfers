@@ -29,46 +29,114 @@ from constants import (
 # ────────────────────────────────────────────────────────────────────
 # fonts
 # ────────────────────────────────────────────────────────────────────
-_FONT_PATH = "unset"
+_TITLE_FONT_PATH = "unset"
+_UI_FONT_PATH = "unset"
 
 
-def _resolve_font_path():
-    """Custom font: drop a font.ttf / font.otf next to the code (or in assets/) to override.
-    Otherwise use the first rounded / heavy system font we can find."""
-    global _FONT_PATH
-    if _FONT_PATH != "unset":
-        return _FONT_PATH
-    _FONT_PATH = None
+def _resolve_fonts():
+    """Resolve Nexa Slab font family (Bold for display/titles/scores, Regular/Bold for UI)."""
+    global _TITLE_FONT_PATH, _UI_FONT_PATH
+    if _TITLE_FONT_PATH != "unset" and _UI_FONT_PATH != "unset":
+        return _TITLE_FONT_PATH, _UI_FONT_PATH
+
     base = os.path.dirname(os.path.abspath(__file__))
-    for d in (base, os.path.join(base, "assets")):
-        for n in ("font.ttf", "font.otf"):
-            p = os.path.join(d, n)
+    search_dirs = [
+        os.path.join(base, "assets", "fonts"),
+        os.path.join(base, "assests", "fonts"),
+        os.path.join(base, "assets"),
+        os.path.join(base, "assests"),
+        base,
+        "C:/Windows/Fonts",
+    ]
+
+    # 1. Nexa Slab Bold for titles, banners, scores, and badges
+    title_candidates = [
+        "Nexa Slab Bold.otf",
+        "Nexa Slab Bold.ttf",
+        "Nexa_Slab_Bold.otf",
+        "Nexa_Slab_Bold.ttf",
+        "NexaSlabBold.otf",
+        "SHOWG.TTF",
+        "ARLRDBD.TTF",
+    ]
+    _TITLE_FONT_PATH = None
+    for d in search_dirs:
+        for c in title_candidates:
+            p = os.path.join(d, c)
             if os.path.isfile(p):
-                _FONT_PATH = p
-                return p
-    for n in ("arialroundedmtbold", "lilitaone", "fredoka", "baloo2", "nunitoblack", "nunito",
-              "poppinsbold", "segoeuiblack", "arialblack", "verdana"):
-        p = pygame.font.match_font(n)
-        if p:
-            _FONT_PATH = p
+                _TITLE_FONT_PATH = p
+                break
+        if _TITLE_FONT_PATH:
             break
-    return _FONT_PATH
+
+    if not _TITLE_FONT_PATH:
+        for q in ("nexa slab bold", "nexa slab", "showcard gothic", "arial rounded", "cooper black"):
+            p = pygame.font.match_font(q)
+            if p:
+                _TITLE_FONT_PATH = p
+                break
+
+    # 2. Nexa Slab Regular for body UI, prompts, subtitles, hints
+    ui_candidates = [
+        "Nexa Slab Regular.otf",
+        "Nexa Slab Regular.ttf",
+        "Nexa_Slab_Regular.otf",
+        "Nexa_Slab_Regular.ttf",
+        "NexaSlabRegular.otf",
+        "Nexa Slab Bold.otf",
+        "ARLRDBD.TTF",
+    ]
+    _UI_FONT_PATH = None
+    for d in search_dirs:
+        for c in ui_candidates:
+            p = os.path.join(d, c)
+            if os.path.isfile(p):
+                _UI_FONT_PATH = p
+                break
+        if _UI_FONT_PATH:
+            break
+
+    if not _UI_FONT_PATH:
+        for q in ("nexa slab regular", "nexa slab", "arial rounded", "berlin sans fb"):
+            p = pygame.font.match_font(q)
+            if p:
+                _UI_FONT_PATH = p
+                break
+
+    return _TITLE_FONT_PATH, _UI_FONT_PATH
 
 
-def font(name, size, bold=False, italic=False):
-    """Project-wide font factory (the `name` argument is kept for compatibility)."""
-    path = _resolve_font_path()
+def title_font(size: int, bold: bool = True, italic: bool = False):
+    """Nexa Slab Bold font for titles, scores, and banners."""
+    t_path, _ = _resolve_fonts()
     try:
-        if path:
-            f = pygame.font.Font(path, size)
+        if t_path:
+            f = pygame.font.Font(t_path, size)
             f.set_italic(italic)
             return f
     except Exception:
         pass
     try:
-        return pygame.font.SysFont("Arial", size, bold=True, italic=italic)
+        return pygame.font.SysFont("Nexa Slab Bold", size, bold=True, italic=italic)
     except Exception:
-        return pygame.font.SysFont(None, size, bold=True, italic=italic)
+        return pygame.font.SysFont("Arial Rounded MT Bold", size, bold=True, italic=italic)
+
+
+def font(name, size: int, bold: bool = False, italic: bool = False):
+    """Nexa Slab font for all UI text, labels, controls, prompts, and HUD."""
+    t_path, u_path = _resolve_fonts()
+    f_path = t_path if bold and t_path else (u_path or t_path)
+    try:
+        if f_path:
+            f = pygame.font.Font(f_path, size)
+            f.set_italic(italic)
+            return f
+    except Exception:
+        pass
+    try:
+        return pygame.font.SysFont("Nexa Slab", size, bold=bold, italic=italic)
+    except Exception:
+        return pygame.font.SysFont("Arial", size, bold=True, italic=italic)
 
 
 # ────────────────────────────────────────────────────────────────────

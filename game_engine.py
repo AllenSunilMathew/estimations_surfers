@@ -19,6 +19,8 @@ from constants import (
     PLAYER_SLIDE_DURATION,
     PLAYER_LANE_SWITCH_SPEED,
     BIRD_SPEED_FACTOR,
+    TRAIN_SPEED_FACTOR,
+    POLICE_CHASE_DURATION,
 )
 
 
@@ -117,15 +119,21 @@ class Player:
 class Obstacle:
     def __init__(self, lane: int, obs_type: str):
         self.lane = lane
-        self.type = obs_type      # "barrier" | "low_bar" | "bird"
+        self.type = obs_type      # "barrier" | "low_bar" | "bird" | "train"
         self.z = 0.0              # 0 = horizon, 1 = at player
         self.active = True
         self.phase = random.uniform(0, 6.28)   # wing-flap / sway offset (birds)
 
     def update(self, speed, dt):
-        k = BIRD_SPEED_FACTOR if self.type == "bird" else 1.0
+        if self.type == "train":
+            k = TRAIN_SPEED_FACTOR
+        elif self.type == "bird":
+            k = BIRD_SPEED_FACTOR
+        else:
+            k = 1.0
         self.z += speed * dt * 0.14 * k
-        if self.z > 1.25:
+        max_z = 1.60 if self.type == "train" else 1.25
+        if self.z > max_z:
             self.active = False
 
 
@@ -158,12 +166,23 @@ class GameEngine:
         self.lives = INITIAL_LIVES
         self.speed = INITIAL_SPEED
         self.game_over = False
+        self.cause_of_death = ""
         self.distance = 0.0
         self.flash_timer = 0.0
         self._prev_gesture = Gesture.NEUTRAL
         self._obstacle_timer = 0.0
         self._coin_timer = 0.0
         self._next_obstacle_interval = self._rand_obstacle_interval()
+
+        # Police Inspector & Dog pursuit system
+        # In Subway Surfers, Police & Dog chase right behind at game start!
+        self.police_active = True
+        self.police_timer = POLICE_CHASE_DURATION
+        self.police_z = 0.985       # z position right behind player (player is at z=0.92)
+        self.police_target_z = 0.985
+        self.police_lane = 1.0      # smoothly tracks player lane
+        self.is_stumbling = False
+        self.stumble_timer = 0.0
 
     def reset(self):
         self.__init__()
@@ -190,22 +209,45 @@ class GameEngine:
 
         self.player.update(dt)
 
-        # Speed ramp
-        level = self.score // SPEED_INCREMENT_INTERVAL
-        self.speed = min(INITIAL_SPEED + level * SPEED_INCREMENT, MAX_SPEED)
+        # Update Police Inspector & Dog pursuit
+        self.police_lane += (self.player.visual_lane() - self.police_lane) * min(1.0, dt * 5.5)
+        if self.police_active:
+            self.police_timer -= dt
+            if self.police_timer <= 0:
+                self.police_active = False
+                self.police_target_z = 1.35   # fall back off-screen
+            else:
+                self.police_target_z = 0.985  # breath down player's neck
+        else:
+            self.police_target_z = 1.35
 
-        # Spawn obstacles
+        self.police_z += (self.police_target_z - self.police_z) * min(1.0, dt * 3.2)
+
+        # Update player stumble
+        if self.stumble_timer > 0:
+            self.stumble_timer -= dt
+            if self.stumble_timer <= 0:
+                self.is_stumbling = False
+
+        # Progressive speed curve: accelerates noticeably as score increases
+        # Initial: 5.0 -> Score 200: ~7.5 -> Score 600: ~11.0 -> Max: 16.0
+        speed_boost = ((max(0, self.score) / 35.0) ** 0.82) * 0.60
+        self.speed = min(INITIAL_SPEED + speed_boost, MAX_SPEED)
+
+        # Spawn obstacles with pacing adjusted to current speed
         self._obstacle_timer += dt
         if self._obstacle_timer >= self._next_obstacle_interval:
             self._obstacle_timer = 0.0
             self._next_obstacle_interval = self._rand_obstacle_interval()
             lane = random.randint(0, 2)
-            t = random.choice(["barrier", "barrier", "low_bar", "bird", "bird"])
+            # Spawn barriers, low bars, birds, and oncoming trains!
+            t = random.choice(["barrier", "barrier", "low_bar", "bird", "train", "train"])
             self.obstacles.append(Obstacle(lane, t))
 
-        # Spawn coins
+        # Spawn coins with pacing scaled to speed
         self._coin_timer += dt
-        if self._coin_timer >= COIN_SPAWN_INTERVAL:
+        dynamic_coin_interval = max(0.40, COIN_SPAWN_INTERVAL * (INITIAL_SPEED / max(self.speed, 1.0)))
+        if self._coin_timer >= dynamic_coin_interval:
             self._coin_timer = 0.0
             lane = random.randint(0, 2)
             if not any(o.lane == lane and o.z < 0.25 for o in self.obstacles):
@@ -231,7 +273,9 @@ class GameEngine:
     # ── helpers ─────────────────────────────────────────────────────
 
     def _rand_obstacle_interval(self):
-        return random.uniform(OBSTACLE_SPAWN_MIN, OBSTACLE_SPAWN_MAX)
+        base = random.uniform(OBSTACLE_SPAWN_MIN, OBSTACLE_SPAWN_MAX)
+        pacing_factor = max(0.68, INITIAL_SPEED / max(self.speed, 1.0))
+        return base * pacing_factor
 
     def _check_collisions(self):
         plr = self.player.collision_lane()
@@ -239,18 +283,47 @@ class GameEngine:
         for o in self.obstacles:
             if not o.active:
                 continue
+
+            # ── 1. ONCOMING TRAIN COLLISION (Fatal Hard Hit) ────────
+            if o.type == "train":
+                # Train has elongated front-to-back body
+                if 0.78 <= o.z <= 1.25 and o.lane == plr:
+                    o.active = False
+                    self.hit_events.append((o.lane, o.z, "train"))
+                    self.cause_of_death = "HIT BY AN ONCOMING TRAIN!"
+                    self.lives = 0
+                    self.game_over = True
+                    self.flash_timer = 0.35
+                    self.police_z = 0.94
+                continue
+
+            # ── 2. BARRIER / LOW BAR / BIRD COLLISIONS ──────────────
             if 0.82 <= o.z <= 1.0 and o.lane == plr:
                 if o.type == "barrier" and self.player.is_jumping:
                     continue
                 if o.type in ("low_bar", "bird") and self.player.is_sliding:
                     continue          # duck under bars and birds
-                # hit!
+
+                # Player collided with obstacle!
                 o.active = False
-                self.hit_events.append((o.lane, o.z, o.type))
-                self.lives -= 1
-                self.flash_timer = 0.30
-                if self.lives <= 0:
+
+                # If police is ALREADY right behind pursuing: HARD HIT -> BUSTED!
+                if self.police_active and self.police_z < 1.08:
+                    self.hit_events.append((o.lane, o.z, o.type))
+                    self.cause_of_death = "CAUGHT BY THE INSPECTOR & DOG!"
+                    self.lives = 0
                     self.game_over = True
+                    self.flash_timer = 0.30
+                    self.police_z = 0.93   # tackles runner
+                else:
+                    # SMALL HIT / STUMBLE! Police and dog immediately sprint up from behind!
+                    self.hit_events.append((o.lane, o.z, "stumble"))
+                    self.is_stumbling = True
+                    self.stumble_timer = 0.75
+                    self.police_active = True
+                    self.police_timer = POLICE_CHASE_DURATION
+                    self.police_target_z = 0.985
+                    self.flash_timer = 0.16
 
         for c in self.coins:
             if c.collected or not c.active:

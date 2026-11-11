@@ -15,7 +15,7 @@ import numpy as np
 import pygame
 
 from constants import *
-from theme import (font as _font, build_card_bg, text as _text, panel as _panel,
+from theme import (font as _font, title_font as _title_font, build_card_bg, text as _text, panel as _panel,
                    header_band as _header_band, coin as _coin, Bubbles,
                    soft_shadow_ellipse)
 
@@ -93,9 +93,9 @@ class Preloader:
         self._fading = False
         self.t = 0.0
 
-        self.f_brand = _font("Arial", 26)
+        self.f_brand = _title_font(26)
         self.f_sub = _font("Arial", 16)
-        self.f_pct = _font("Arial", 20)
+        self.f_pct = _title_font(22)
         self.f_tip = _font("Arial", 16)
 
         self._bg = self._build_bg()
@@ -227,18 +227,21 @@ class MainMenu:
         self.W, self.H = WINDOW_WIDTH, WINDOW_HEIGHT
         self.t = 0.0
 
-        self.f_title = _font("Arial", 64, True, True)
-        self.f_sub = _font("Arial", 26, True, True)
-        self.f_panel = _font("Arial", 24, True, True)
-        self.f_gesture = _font("Arial", 20, True)
-        self.f_action = _font("Arial", 20, True, True)
-        self.f_prompt = _font("Arial", 24, True)
-        self.f_small = _font("Arial", 16, True)
+        self.f_title = _title_font(56)
+        self.f_sub = _font("Arial", 22)
+        self.f_panel = _title_font(22)
+        self.f_gesture = _font("Arial", 18)
+        self.f_action = _title_font(18)
+        self.f_prompt = _title_font(22)
+        self.f_small = _font("Arial", 15)
+        self.f_tiny = _title_font(13)
 
         self.cam_rect = pygame.Rect(80, 205, 500, 370)
         self.ctl_rect = pygame.Rect(620, 205, 580, 370)
         self.cam_inner = pygame.Rect(self.cam_rect.x + 12, self.cam_rect.y + 56,
                                      self.cam_rect.w - 24, self.cam_rect.h - 68)
+        # Clickable camera switch button docked at bottom-right inside camera preview
+        self.cam_switch_rect = pygame.Rect(self.cam_inner.right - 150, self.cam_inner.bottom - 46, 140, 38)
         card = pygame.Rect(22, 22, self.W - 44, self.H - 44)
         self._bubbles = Bubbles(self.W, self.H, 34, seed=9, area=card)
         self._bg = build_card_bg(self.W, self.H, margin=22, radius=34)
@@ -315,13 +318,13 @@ class MainMenu:
         rgb = np.ascontiguousarray(rgb[y0:y0 + th, x0:x0 + tw])
         return pygame.image.frombuffer(rgb.tobytes(), (tw, th), "RGB")
 
-    def draw(self, cam_frame=None):
+    def draw(self, cam_frame=None, is_fullscreen=False, mouse_pos=(0, 0), cam_name="WEBCAM"):
         s = self.screen
         s.blit(self._bg, (0, 0))
         self._bubbles.draw(s, self.t)
         s.blit(self._ui, (0, 0))
 
-        # spinning coins beside the title
+        # Symmetrical spinning coins beside the title
         sq = 0.2 + 0.8 * abs(math.cos(self.t * 3))
         for x in (170, self.W - 170):
             _coin(s, x, 92, 30, sq)
@@ -336,10 +339,24 @@ class MainMenu:
             _text(s, self.f_gesture, "NO CAMERA DETECTED", (255, 190, 190), ci.center, anchor="center")
         s.blit(self._mask, ci.topleft)
         pygame.draw.rect(s, WHITE, ci, 2, border_radius=12)
+
+        # Live status dot in camera panel header
         dot = (70, 235, 110) if live else (255, 110, 110)
-        pygame.draw.circle(s, dot, (self.cam_rect.right - 100, self.cam_rect.y + 27), 6)
+        pygame.draw.circle(s, dot, (self.cam_rect.right - 100, self.cam_rect.y + 24), 6)
         _text(s, self.f_small, "LIVE" if live else "OFFLINE", WHITE,
-              (self.cam_rect.right - 88, self.cam_rect.y + 19))
+              (self.cam_rect.right - 88, self.cam_rect.y + 16))
+
+        # ── Interactive Camera Switch Button inside preview (Bottom-Right) ──
+        cs = self.cam_switch_rect
+        is_hover_cs = cs.collidepoint(mouse_pos)
+        cps = pygame.Surface(cs.size, pygame.SRCALPHA)
+        cs_bg = (52, 150, 196, 235) if is_hover_cs else (*PANEL_DARK, 225)
+        pygame.draw.rect(cps, cs_bg, (0, 0, *cs.size), border_radius=14)
+        border_c = GOLD_BRIGHT if is_hover_cs else WHITE
+        pygame.draw.rect(cps, border_c, (0, 0, *cs.size), 2, border_radius=14)
+        s.blit(cps, cs.topleft)
+        cam_lbl = self.f_tiny.render(f"📷 {cam_name} [C]", True, GOLD_BRIGHT if is_hover_cs else WHITE)
+        s.blit(cam_lbl, (cs.centerx - cam_lbl.get_width() // 2, cs.centery - cam_lbl.get_height() // 2))
 
         # start prompt (pulsing white pill)
         pulse = abs(math.sin(self.t * 2.2))
