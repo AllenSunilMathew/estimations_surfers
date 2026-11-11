@@ -28,14 +28,14 @@ class _Particle:
     """Small coin-collection sparkle."""
     __slots__ = ("x", "y", "vx", "vy", "life", "size", "color")
 
-    def __init__(self, x, y):
+    def __init__(self, x, y, colors=None):
         self.x = float(x)
         self.y = float(y)
         self.vx = random.uniform(-100, 100)
         self.vy = random.uniform(-180, -40)
         self.life = 1.0
         self.size = random.randint(2, 5)
-        self.color = random.choice([GOLD, (255, 230, 90), WHITE])
+        self.color = random.choice(colors or [GOLD, (255, 230, 90), WHITE])
 
     def tick(self, dt):
         self.x += self.vx * dt
@@ -447,6 +447,12 @@ class Renderer:
             sx, sy, _ = self._world2screen(lane, z)
             for _ in range(12):
                 self.particles.append(_Particle(sx, sy - 20))
+        for lane, z, kind in engine.hit_events:
+            sx, sy, _ = self._world2screen(lane, z)
+            cols = [(50, 56, 90), (96, 108, 170), WHITE, (255, 170, 50)] if kind == "bird" \
+                else [(205, 48, 52), WHITE, (255, 200, 40)]
+            for _ in range(18):
+                self.particles.append(_Particle(sx, sy - 40, cols))
         for p in self.particles:
             pygame.draw.circle(self.screen, p.color, (int(p.x), int(p.y)), max(1, int(p.size * p.life)))
 
@@ -498,6 +504,9 @@ class Renderer:
     def _draw_obstacle(self, obs):
         if obs.z < 0.06 or obs.z > 1.1:
             return
+        if obs.type == "bird":
+            self._draw_bird(obs)
+            return
         x, y, scale = self._world2screen(obs.lane, obs.z)
         if obs.type == "barrier":
             w, h = max(10, int(104 * scale)), max(8, int(64 * scale))
@@ -529,6 +538,34 @@ class Renderer:
                                     [(sx, bar.bottom), (sx + sw, bar.bottom),
                                      (min(sx + sw + bh, bar.right), bar.y), (min(sx + bh, bar.right), bar.y)])
             pygame.draw.rect(self.screen, (60, 50, 30), bar, 1)
+
+    def _draw_bird(self, obs):
+        """Front-view bird flapping towards the player. Duck (slide) to pass under it."""
+        sway = math.sin(self.t * 3 + obs.phase) * 0.18
+        x, y, s = self._world2screen(obs.lane + sway, obs.z)
+        fly_y = y - int(86 * s)                    # head / chest height
+        soft_shadow_ellipse(self.screen, pygame.Rect(x - int(30 * s), y - int(5 * s),
+                                                     max(8, int(60 * s)), max(3, int(12 * s))), 70)
+        flap = math.sin(self.t * 16 + obs.phase)
+        body_c, wing_c, wing_d = (50, 56, 90), (88, 100, 160), (36, 42, 72)
+        for side in (-1, 1):
+            root = (x + side * 10 * s, fly_y - 4 * s)
+            tip = (x + side * 62 * s, fly_y - 10 * s - flap * 30 * s)
+            back = (x + side * 40 * s, fly_y + 14 * s - flap * 12 * s)
+            low = (x + side * 8 * s, fly_y + 12 * s)
+            pygame.draw.polygon(self.screen, wing_c, [root, tip, back, low])
+            pygame.draw.polygon(self.screen, wing_d, [root, tip, back, low], max(1, int(2 * s)))
+        pygame.draw.ellipse(self.screen, body_c,
+                            (x - 16 * s, fly_y - 17 * s, 32 * s, 38 * s))
+        pygame.draw.ellipse(self.screen, (170, 180, 215),
+                            (x - 9 * s, fly_y - 4 * s, 18 * s, 22 * s))
+        hy = fly_y - 22 * s
+        pygame.draw.circle(self.screen, body_c, (int(x), int(hy)), max(3, int(13 * s)))
+        pygame.draw.polygon(self.screen, (255, 160, 40),
+                            [(x - 5 * s, hy + 3 * s), (x + 5 * s, hy + 3 * s), (x, hy + 14 * s)])
+        for ex in (-5, 5):
+            pygame.draw.circle(self.screen, WHITE, (int(x + ex * s), int(hy - 2 * s)), max(2, int(4.5 * s)))
+            pygame.draw.circle(self.screen, BLACK, (int(x + ex * s), int(hy - 1 * s)), max(1, int(2 * s)))
 
     def _draw_coin(self, coin):
         if coin.z < 0.06 or coin.z > 1.1:

@@ -12,6 +12,7 @@ from constants import (
     GESTURE_DIAGONAL_THRESHOLD,
     GESTURE_CROUCH_THRESHOLD,
     CALIBRATION_FRAMES,
+    LANE_MOVE_THRESHOLD,
 )
 
 
@@ -29,6 +30,12 @@ class PoseDetector:
         self.calibration_count = 0
         self.calibrated_nose_y = None
         self._nose_y_samples: list[float] = []
+
+        # Lane control – body position left / right of the calibrated centre
+        self.calibrated_x = None
+        self._x_samples: list[float] = []
+        self._offset = 0.0
+        self.lane_target = None      # 0 left · 1 centre · 2 right · None = unknown
 
         # Gesture smoothing (majority‑vote over recent frames)
         self._gesture_history: list[str] = []
@@ -54,13 +61,25 @@ class PoseDetector:
             if self.calibration_count < CALIBRATION_FRAMES:
                 nose_y = lm[self.mp_pose.PoseLandmark.NOSE.value].y
                 self._nose_y_samples.append(nose_y)
+                self._x_samples.append(self._body_x(lm))
                 self.calibration_count += 1
                 if self.calibration_count == CALIBRATION_FRAMES:
                     self.calibrated_nose_y = float(np.mean(self._nose_y_samples))
+                    self.calibrated_x = float(np.mean(self._x_samples))
+                    self.lane_target = 1
             else:
                 gesture = self._classify(lm)
+                self._update_lane(lm)
+                # show lane movement in the "Gesture:" label
+                if gesture == Gesture.NEUTRAL:
+                    if self.lane_target == 0:
+                        gesture = Gesture.LEFT
+                    elif self.lane_target == 2:
+                        gesture = Gesture.RIGHT
 
             self._draw_skeleton(frame, results.pose_landmarks)
+
+        self._draw_lane_guides(frame)
 
         return gesture, confidence, frame
 
@@ -69,6 +88,10 @@ class PoseDetector:
         self.calibration_count = 0
         self.calibrated_nose_y = None
         self._nose_y_samples.clear()
+        self.calibrated_x = None
+        self._x_samples.clear()
+        self._offset = 0.0
+        self.lane_target = None
         self._gesture_history.clear()
 
     def release(self):
@@ -87,6 +110,42 @@ class PoseDetector:
             self.mp_pose.PoseLandmark.RIGHT_HIP,
         ]
         return sum(landmarks[k.value].visibility for k in key) / len(key)
+
+    def _body_x(self, lm):
+        """Horizontal centre of the shoulders (0-1, image is already mirrored)."""
+        P = self.mp_pose.PoseLandmark
+        return (lm[P.LEFT_SHOULDER.value].x + lm[P.RIGHT_SHOULDER.value].x) / 2
+
+    def _update_lane(self, lm):
+        """Step left / right of the calibrated centre -> lane 0 / 2 (with hysteresis)."""
+        if self.calibrated_x is None:
+            return
+        off = self._body_x(lm) - self.calibrated_x
+        self._offset = 0.5 * self._offset + 0.5 * off   # light smoothing
+        t = LANE_MOVE_THRESHOLD
+        lane = self.lane_target if self.lane_target is not None else 1
+        if lane == 1:
+            if self._offset < -t:
+                lane = 0
+            elif self._offset > t:
+                lane = 2
+        elif lane == 0 and self._offset > -t * 0.5:
+            lane = 1
+        elif lane == 2 and self._offset < t * 0.5:
+            lane = 1
+        self.lane_target = lane
+
+    def _draw_lane_guides(self, frame):
+        """Two vertical lines on the camera feed: step past them to change lane."""
+        if self.calibrated_x is None:
+            return
+        h, w = frame.shape[:2]
+        for sign in (-1, 1):
+            x = int((self.calibrated_x + sign * LANE_MOVE_THRESHOLD) * w)
+            for y in range(0, h, 24):
+                cv2.line(frame, (x, y), (x, min(h, y + 12)), (255, 255, 255), 2)
+        cx = int(self.calibrated_x * w)
+        cv2.line(frame, (cx, h - 30), (cx, h), (0, 255, 255), 3)
 
     def _classify(self, lm):
         P = self.mp_pose.PoseLandmark
@@ -110,19 +169,7 @@ class PoseDetector:
             if drop > GESTURE_CROUCH_THRESHOLD:
                 return self._smooth(Gesture.SLIDE)
 
-        # 3. LEFT  — "/" shape: left hand down, right hand up
-        #    In image coords (Y↓): left‑wrist larger Y, right‑wrist smaller Y
-        left_down = lw_y - rw_y          # positive → left is lower
-        if left_down > GESTURE_DIAGONAL_THRESHOLD:
-            # extra check: elbows follow the same trend
-            if lw_y > le_y and rw_y < re_y:
-                return self._smooth(Gesture.LEFT)
-
-        # 4. RIGHT — "\" shape: left hand up, right hand down
-        right_down = rw_y - lw_y
-        if right_down > GESTURE_DIAGONAL_THRESHOLD:
-            if rw_y > re_y and lw_y < le_y:
-                return self._smooth(Gesture.RIGHT)
+        # Left / right are handled by body position (see _update_lane).
 
         return self._smooth(Gesture.NEUTRAL)
 

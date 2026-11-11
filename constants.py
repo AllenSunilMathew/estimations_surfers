@@ -48,6 +48,7 @@ GESTURE_ARM_THRESHOLD = 0.05      # Wrist above shoulder
 GESTURE_DIAGONAL_THRESHOLD = 0.08  # Wrist‑Y diff for / and \
 GESTURE_CROUCH_THRESHOLD = 0.12   # Nose‑drop for squat
 CALIBRATION_FRAMES = 30
+LANE_MOVE_THRESHOLD = 0.08        # body sideways shift (fraction of frame width) to change lane
 
 # ── Game mechanics ──────────────────────────────────────────────────
 INITIAL_SPEED = 4.5
@@ -59,6 +60,7 @@ OBSTACLE_SPAWN_MAX = 1.8
 COIN_SPAWN_INTERVAL = 0.7
 INITIAL_LIVES = 3
 COIN_SCORE = 50
+BIRD_SPEED_FACTOR = 1.3            # birds fly faster than the ground scrolls
 DISTANCE_SCORE_RATE = 2            # points per unit‑distance
 
 # ── Player animation ───────────────────────────────────────────────

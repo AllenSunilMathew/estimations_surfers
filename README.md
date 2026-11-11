@@ -24,10 +24,21 @@ python main.py
 
 | Body Pose | Game Action |
 |---|---|
+| ⬅️ Step / lean **left** of your centre mark | Character runs to the **left** lane |
+| ➡️ Step / lean **right** of your centre mark | Character runs to the **right** lane |
 | ⬆️ Both arms raised | **Jump** over barriers |
-| ⬇️ Sit / crouch down | **Slide** under low bars |
-| ↙️ Left hand down + right hand up (`/` shape) | **Move left** |
-| ↗️ Left hand up + right hand down (`\` shape) | **Move right** |
+| ⬇️ Sit / crouch down | **Slide** under low bars and **duck birds** |
+
+Stand still for the calibration bar: that spot becomes your centre. Two dashed
+white lines then appear on the camera feed - move past the left line for the
+left lane, past the right line for the right lane, and come back between them
+for the middle lane.
+
+## Obstacles
+
+- 🚧 **Barrier** – jump over it (or change lane)
+- 🟨 **Low bar** – slide under it (or change lane)
+- 🐦 **Bird** – flies fast at head height; crouch to duck under it (jumping will hit it!) or change lane
 
 You can also press **SPACE** to start the built-in game and **ESC** to quit/return to menu.
 

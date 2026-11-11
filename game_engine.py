@@ -18,6 +18,7 @@ from constants import (
     PLAYER_JUMP_DURATION,
     PLAYER_SLIDE_DURATION,
     PLAYER_LANE_SWITCH_SPEED,
+    BIRD_SPEED_FACTOR,
 )
 
 
@@ -88,6 +89,21 @@ class Player:
             self.target_lane += 1
             self.lane_progress = 0.0
 
+    def steer(self, desired_lane):
+        """Head one lane at a time towards the lane the body is in."""
+        if desired_lane is None or self.lane != self.target_lane:
+            return
+        if desired_lane < self.target_lane:
+            self.move_left()
+        elif desired_lane > self.target_lane:
+            self.move_right()
+
+    def collision_lane(self):
+        """Lane used for hit tests: switches half-way through a lane change."""
+        if self.lane != self.target_lane and self.lane_progress >= 0.5:
+            return self.target_lane
+        return self.lane
+
     def visual_lane(self):
         """Interpolated lane for smooth rendering."""
         if self.lane != self.target_lane:
@@ -101,12 +117,14 @@ class Player:
 class Obstacle:
     def __init__(self, lane: int, obs_type: str):
         self.lane = lane
-        self.type = obs_type      # "barrier" | "low_bar"
+        self.type = obs_type      # "barrier" | "low_bar" | "bird"
         self.z = 0.0              # 0 = horizon, 1 = at player
         self.active = True
+        self.phase = random.uniform(0, 6.28)   # wing-flap / sway offset (birds)
 
     def update(self, speed, dt):
-        self.z += speed * dt * 0.14
+        k = BIRD_SPEED_FACTOR if self.type == "bird" else 1.0
+        self.z += speed * dt * 0.14 * k
         if self.z > 1.25:
             self.active = False
 
@@ -135,6 +153,7 @@ class GameEngine:
         self.obstacles: list[Obstacle] = []
         self.coins: list[Coin] = []
         self.coin_collect_events: list[tuple[int, float]] = []
+        self.hit_events: list[tuple[int, float, str]] = []
         self.score = 0
         self.lives = INITIAL_LIVES
         self.speed = INITIAL_SPEED
@@ -151,11 +170,12 @@ class GameEngine:
 
     # ── tick ────────────────────────────────────────────────────────
 
-    def update(self, gesture: str, dt: float):
+    def update(self, gesture: str, dt: float, lane_target=None):
         if self.game_over:
             return
 
         self.coin_collect_events.clear()
+        self.hit_events.clear()
 
         # Edge‑triggered gesture → action
         if gesture != self._prev_gesture:
@@ -163,11 +183,10 @@ class GameEngine:
                 self.player.jump()
             elif gesture == Gesture.SLIDE:
                 self.player.slide()
-            elif gesture == Gesture.LEFT:
-                self.player.move_left()
-            elif gesture == Gesture.RIGHT:
-                self.player.move_right()
         self._prev_gesture = gesture
+
+        # Body position -> lane (step left = run left, step right = run right)
+        self.player.steer(lane_target)
 
         self.player.update(dt)
 
@@ -181,7 +200,7 @@ class GameEngine:
             self._obstacle_timer = 0.0
             self._next_obstacle_interval = self._rand_obstacle_interval()
             lane = random.randint(0, 2)
-            t = random.choices(["barrier", "barrier", "low_bar"], k=1)[0]
+            t = random.choice(["barrier", "barrier", "low_bar", "bird", "bird"])
             self.obstacles.append(Obstacle(lane, t))
 
         # Spawn coins
@@ -215,7 +234,7 @@ class GameEngine:
         return random.uniform(OBSTACLE_SPAWN_MIN, OBSTACLE_SPAWN_MAX)
 
     def _check_collisions(self):
-        plr = self.player.lane
+        plr = self.player.collision_lane()
 
         for o in self.obstacles:
             if not o.active:
@@ -223,10 +242,11 @@ class GameEngine:
             if 0.82 <= o.z <= 1.0 and o.lane == plr:
                 if o.type == "barrier" and self.player.is_jumping:
                     continue
-                if o.type == "low_bar" and self.player.is_sliding:
-                    continue
+                if o.type in ("low_bar", "bird") and self.player.is_sliding:
+                    continue          # duck under bars and birds
                 # hit!
                 o.active = False
+                self.hit_events.append((o.lane, o.z, o.type))
                 self.lives -= 1
                 self.flash_timer = 0.30
                 if self.lives <= 0:
