@@ -101,7 +101,6 @@ An endless 3D runner game inspired by *Subway Surfers*, controlled entirely by y
 
 1. Open a terminal in the project directory:
    ```bash
-   cd "C:\Users\Allen Sunil Mathew\.gemini\antigravity\scratch\treasure_runner"
    ```
 
 2. Install the required dependencies:
