@@ -100,7 +100,9 @@ An endless 3D runner game inspired by *Subway Surfers*, controlled entirely by y
 ## 🚀 Installation
 
 1. Open a terminal in the project directory:
-   ```bash   ```
+   ```bash
+   cd "C:\Users\Allen Sunil Mathew\.gemini\antigravity\scratch\treasure_runner"
+   ```
 
 2. Install the required dependencies:
    ```bash
@@ -163,4 +165,4 @@ treasure_runner/
         ├── Nexa Slab Bold.otf
         └── Nexa Slab Regular.otf
 ```
-# pose-estimation-runner
+# estimations_surfers
